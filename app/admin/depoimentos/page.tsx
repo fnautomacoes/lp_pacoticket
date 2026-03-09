@@ -1,6 +1,7 @@
 // app/admin/depoimentos/page.tsx
 import { db } from '@/lib/db'
 import { revalidatePages } from '@/lib/revalidate'
+import { redirect } from 'next/navigation'
 
 async function saveTestimonial(formData: FormData) {
   'use server'
@@ -13,26 +14,42 @@ async function saveTestimonial(formData: FormData) {
   const published = formData.get('published') === 'on'
   const order    = parseInt(formData.get('order') as string) || 0
 
-  if (id) {
-    await db.testimonial.update({ where: { id }, data: { author, role, content, avatarBg, avatarInitials, published, order } })
-  } else {
-    await db.testimonial.create({ data: { author, role, content, avatarBg, avatarInitials, published, order } })
+  try {
+    if (id) {
+      await db.testimonial.update({ where: { id }, data: { author, role, content, avatarBg, avatarInitials, published, order } })
+    } else {
+      await db.testimonial.create({ data: { author, role, content, avatarBg, avatarInitials, published, order } })
+    }
+    revalidatePages('home')
+  } catch (e) {
+    console.error('[saveTestimonial] falha:', e)
+    redirect('/admin/depoimentos?error=1')
   }
-  revalidatePages('home')
 }
 
 async function deleteTestimonial(formData: FormData) {
   'use server'
   const id = formData.get('id') as string
-  await db.testimonial.delete({ where: { id } })
-  revalidatePages('home')
+  try {
+    await db.testimonial.delete({ where: { id } })
+    revalidatePages('home')
+  } catch (e) {
+    console.error('[deleteTestimonial] falha:', e)
+    redirect('/admin/depoimentos?error=1')
+  }
 }
 
-export default async function DepoimentosPage() {
+export default async function DepoimentosPage({ searchParams }: { searchParams: { error?: string } }) {
   const testimonials = await db.testimonial.findMany({ orderBy: { order: 'asc' } })
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao salvar. Verifique os dados e tente novamente.
+        </div>
+      )}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:32 }}>
         <div>
           <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>Depoimentos</h1>

@@ -4,33 +4,65 @@ import { revalidatePages } from '@/lib/revalidate'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 
+function generateSlug(title: string): string {
+  return title.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').trim()
+}
+
+async function uniqueSlug(baseSlug: string): Promise<string> {
+  let slug = baseSlug
+  let suffix = 2
+  while (true) {
+    const existing = await db.blogPost.findUnique({ where: { slug } })
+    if (!existing) return slug
+    slug = `${baseSlug}-${suffix++}`
+  }
+}
+
 async function createPost(formData: FormData) {
   'use server'
   const title    = formData.get('title') as string
   const category = formData.get('category') as string
-  const slug = title.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-z0-9\s-]/g,'').replace(/\s+/g,'-').trim()
 
-  const post = await db.blogPost.create({
-    data: { slug, title, excerpt:'', content:'', category, coverEmoji:'📝', published:false }
-  })
-  revalidatePages('blog')
-  redirect(`/admin/blog/${post.id}`)
+  try {
+    const slug = await uniqueSlug(generateSlug(title))
+    const post = await db.blogPost.create({
+      data: { slug, title, excerpt:'', content:'', category, coverEmoji:'📝', published:false }
+    })
+    revalidatePages('blog')
+    redirect(`/admin/blog/${post.id}`)
+  } catch (e) {
+    // redirect() throws, so only catch genuine errors
+    if ((e as { digest?: string }).digest?.startsWith('NEXT_REDIRECT')) throw e
+    console.error('[createPost] falha:', e)
+    redirect('/admin/blog?error=1')
+  }
 }
 
 async function deletePost(formData: FormData) {
   'use server'
   const id = formData.get('id') as string
-  await db.blogPost.delete({ where: { id } })
-  revalidatePages('blog')
+  try {
+    await db.blogPost.delete({ where: { id } })
+    revalidatePages('blog')
+  } catch (e) {
+    console.error('[deletePost] falha:', e)
+    redirect('/admin/blog?error=1')
+  }
 }
 
-export default async function BlogListPage() {
+export default async function BlogListPage({ searchParams }: { searchParams: { error?: string } }) {
   const posts = await db.blogPost.findMany({ orderBy: { createdAt: 'desc' } })
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao processar post. Tente novamente.
+        </div>
+      )}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:32 }}>
         <div>
           <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>Blog</h1>

@@ -1,6 +1,7 @@
 // app/admin/screenshots/page.tsx
 import { db } from '@/lib/db'
 import { revalidatePages } from '@/lib/revalidate'
+import { redirect } from 'next/navigation'
 import type { PageKey } from '@/lib/revalidate'
 
 async function saveScreenshot(formData: FormData) {
@@ -13,17 +14,22 @@ async function saveScreenshot(formData: FormData) {
 
   if (!url) return
 
-  await db.screenshot.upsert({
-    where: { page_section: { page, section } },
-    update: { url, alt, caption },
-    create: { page, section, url, alt, caption },
-  })
+  try {
+    await db.screenshot.upsert({
+      where: { page_section: { page, section } },
+      update: { url, alt, caption },
+      create: { page, section, url, alt, caption },
+    })
 
-  const pageMap: Record<string, PageKey> = {
-    home:'home', funcionalidades:'funcionalidades', flowbuilder:'flowbuilder',
-    ia:'ia', api:'api', sobre:'sobre',
+    const pageMap: Record<string, PageKey> = {
+      home:'home', funcionalidades:'funcionalidades', flowbuilder:'flowbuilder',
+      ia:'ia', api:'api', sobre:'sobre',
+    }
+    revalidatePages(pageMap[page] ?? 'home')
+  } catch (e) {
+    console.error('[saveScreenshot] falha:', e)
+    redirect('/admin/screenshots?error=1')
   }
-  revalidatePages(pageMap[page] ?? 'home')
 }
 
 // All screenshot slots defined here — add new ones as needed
@@ -42,7 +48,7 @@ const SLOTS = [
   { page:'sobre',          section:'equipe',       label:'Sobre — Foto da equipe',              alt:'Equipe Pacoticket' },
 ]
 
-export default async function ScreenshotsPage() {
+export default async function ScreenshotsPage({ searchParams }: { searchParams: { error?: string } }) {
   const screenshots = await db.screenshot.findMany()
   const screenshotMap = new Map(screenshots.map(s => [`${s.page}__${s.section}`, s]))
 
@@ -51,6 +57,12 @@ export default async function ScreenshotsPage() {
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao salvar screenshot. Tente novamente.
+        </div>
+      )}
       <div style={{ marginBottom:32 }}>
         <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>Screenshots</h1>
         <p style={{ color:'#6B7C93', marginTop:4 }}>
@@ -97,7 +109,7 @@ export default async function ScreenshotsPage() {
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={existing.url} alt={existing.alt}
                           style={{ maxHeight:80, borderRadius:8, border:'1px solid rgba(255,255,255,.1)', objectFit:'cover' }}
-                          onError={() => {}} />
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                       </div>
                     )}
                   </form>

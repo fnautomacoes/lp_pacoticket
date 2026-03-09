@@ -1,8 +1,7 @@
 // app/admin/planos/page.tsx
 import { db } from '@/lib/db'
-import { revalidatePath } from 'next/cache'
 import { revalidatePages } from '@/lib/revalidate'
-import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 // ── Server Actions ───────────────────────────────────────────────────────────
 
@@ -17,8 +16,13 @@ async function updatePlan(formData: FormData) {
   const highlighted = formData.get('highlighted') === 'on'
   const published   = formData.get('published') === 'on'
 
-  await db.plan.update({ where: { id }, data: { price, period, badge, ctaLabel, ctaUrl, highlighted, published } })
-  revalidatePages('precos', 'home')
+  try {
+    await db.plan.update({ where: { id }, data: { price, period, badge, ctaLabel, ctaUrl, highlighted, published } })
+    revalidatePages('precos', 'home')
+  } catch (e) {
+    console.error('[updatePlan] falha:', e)
+    redirect('/admin/planos?error=1')
+  }
 }
 
 async function updateFeature(formData: FormData) {
@@ -26,8 +30,13 @@ async function updateFeature(formData: FormData) {
   const id       = formData.get('id') as string
   const text     = formData.get('text') as string
   const included = formData.get('included') === 'on'
-  await db.planFeature.update({ where: { id }, data: { text, included } })
-  revalidatePages('precos')
+  try {
+    await db.planFeature.update({ where: { id }, data: { text, included } })
+    revalidatePages('precos')
+  } catch (e) {
+    console.error('[updateFeature] falha:', e)
+    redirect('/admin/planos?error=1')
+  }
 }
 
 async function addFeature(formData: FormData) {
@@ -35,21 +44,31 @@ async function addFeature(formData: FormData) {
   const planId = formData.get('planId') as string
   const text   = formData.get('text') as string
   if (!text.trim()) return
-  const count = await db.planFeature.count({ where: { planId } })
-  await db.planFeature.create({ data: { planId, text, included: true, order: count } })
-  revalidatePages('precos')
+  try {
+    const count = await db.planFeature.count({ where: { planId } })
+    await db.planFeature.create({ data: { planId, text, included: true, order: count } })
+    revalidatePages('precos')
+  } catch (e) {
+    console.error('[addFeature] falha:', e)
+    redirect('/admin/planos?error=1')
+  }
 }
 
 async function deleteFeature(formData: FormData) {
   'use server'
   const id = formData.get('id') as string
-  await db.planFeature.delete({ where: { id } })
-  revalidatePages('precos')
+  try {
+    await db.planFeature.delete({ where: { id } })
+    revalidatePages('precos')
+  } catch (e) {
+    console.error('[deleteFeature] falha:', e)
+    redirect('/admin/planos?error=1')
+  }
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function PlanosPage() {
+export default async function PlanosPage({ searchParams }: { searchParams: { error?: string } }) {
   const plans = await db.plan.findMany({
     include: { features: { orderBy: { order: 'asc' } } },
     orderBy: { order: 'asc' },
@@ -57,6 +76,12 @@ export default async function PlanosPage() {
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao salvar. Verifique os dados e tente novamente.
+        </div>
+      )}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:32 }}>
         <div>
           <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>Planos de Preço</h1>

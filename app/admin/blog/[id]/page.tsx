@@ -1,40 +1,67 @@
 // app/admin/blog/[id]/page.tsx
 import { db } from '@/lib/db'
 import { revalidatePages } from '@/lib/revalidate'
+import { sanitizeContent } from '@/lib/sanitize'
 import { notFound, redirect } from 'next/navigation'
+
+function generateSlug(title: string): string {
+  return title.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').trim()
+}
+
+async function uniqueSlug(baseSlug: string, excludeId: string): Promise<string> {
+  let slug = baseSlug
+  let suffix = 2
+  while (true) {
+    const existing = await db.blogPost.findUnique({ where: { slug } })
+    if (!existing || existing.id === excludeId) return slug
+    slug = `${baseSlug}-${suffix++}`
+  }
+}
 
 async function savePost(formData: FormData) {
   'use server'
   const id          = formData.get('id') as string
   const title       = formData.get('title') as string
   const excerpt     = formData.get('excerpt') as string
-  const content     = formData.get('content') as string
+  const rawContent  = formData.get('content') as string
+  const content     = sanitizeContent(rawContent)
   const category    = formData.get('category') as string
   const coverEmoji  = formData.get('coverEmoji') as string
   const coverImage  = (formData.get('coverImage') as string).trim() || null
   const published   = formData.get('published') === 'on'
 
-  const slug = title.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[^a-z0-9\s-]/g,'').replace(/\s+/g,'-').trim()
+  const slug = await uniqueSlug(generateSlug(title), id)
 
-  await db.blogPost.update({
-    where: { id },
-    data: {
-      title, slug, excerpt, content, category,
-      coverEmoji, coverImage, published,
-      publishedAt: published ? new Date() : null,
-    }
-  })
-  revalidatePages('blog')
+  try {
+    await db.blogPost.update({
+      where: { id },
+      data: {
+        title, slug, excerpt, content, category,
+        coverEmoji, coverImage, published,
+        publishedAt: published ? new Date() : null,
+      }
+    })
+    revalidatePages('blog')
+  } catch (e) {
+    console.error('[savePost] falha ao salvar post:', e)
+    redirect(`/admin/blog/${id}?error=1`)
+  }
 }
 
-export default async function BlogPostEditor({ params }: { params: { id: string } }) {
+export default async function BlogPostEditor({ params, searchParams }: { params: { id: string }; searchParams: { error?: string } }) {
   const post = await db.blogPost.findUnique({ where: { id: params.id } })
   if (!post) notFound()
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao salvar o post. Verifique os dados e tente novamente.
+        </div>
+      )}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:32 }}>
         <div>
           <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:24, fontWeight:800 }}>Editar Post</h1>
