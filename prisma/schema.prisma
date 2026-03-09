@@ -1,0 +1,149 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ADMIN ────────────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // bcrypt hash
+  createdAt DateTime @default(now())
+}
+
+// ─── SITE CONFIG ──────────────────────────────────────────────────────────────
+// KV store for scalar site settings
+
+model SiteConfig {
+  key       String   @id
+  // Keys used:
+  //   ga_id            → Google Analytics Measurement ID (G-XXXXXXXXXX)
+  //   meta_pixel_id    → Meta Pixel ID
+  //   favicon_url      → URL do favicon
+  //   whatsapp_cta     → número WhatsApp do CTA principal
+  //   app_url          → URL do app (https://app.pacoticket.com.br)
+  //   help_url         → URL da central de ajuda
+  //   demo_url         → URL de agendamento de demo
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─── MÉTRICAS (barra de números) ──────────────────────────────────────────────
+
+model SiteMetric {
+  id    String @id @default(cuid())
+  key   String @unique
+  // Keys: "companies", "tickets_month", "setup_minutes", "channels"
+  label String  // "+3.200 empresas"
+  value String  // "+3.200"
+  suffix String @default("") // "empresas", "tickets/mês"
+  order Int     @default(0)
+}
+
+// ─── PLANOS DE PREÇO ──────────────────────────────────────────────────────────
+
+model Plan {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  name        String
+  price       String?       // "R$ 197" | null = "Sob consulta"
+  period      String?       // "/mês · cobrado mensalmente"
+  highlighted Boolean       @default(false)
+  badge       String?       // "Mais popular"
+  ctaLabel    String        @default("Começar agora")
+  ctaUrl      String        @default("https://app.pacoticket.com.br")
+  order       Int           @default(0)
+  published   Boolean       @default(true)
+  features    PlanFeature[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model PlanFeature {
+  id       String  @id @default(cuid())
+  planId   String
+  plan     Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  text     String
+  included Boolean @default(true)
+  order    Int     @default(0)
+}
+
+// ─── DEPOIMENTOS ──────────────────────────────────────────────────────────────
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  author    String
+  role      String   // "Proprietária · Clínica Dra. Ana"
+  content   String
+  avatarBg  String   @default("#1A2B3C") // cor do avatar placeholder
+  avatarInitials String @default("?")
+  published Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── BLOG ─────────────────────────────────────────────────────────────────────
+
+model BlogPost {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  excerpt     String
+  content     String    @db.Text
+  category    String    // "WhatsApp Business" | "Automação" | "Cases" | "IA" | "Tutoriais"
+  coverEmoji  String    @default("📝")
+  coverImage  String?   // URL da imagem de capa (upload ou link externo)
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─── SCREENSHOTS ──────────────────────────────────────────────────────────────
+
+model Screenshot {
+  id      String @id @default(cuid())
+  page    String // "home" | "funcionalidades" | "flowbuilder" | "ia" | "api"
+  section String // "hero" | "tickets" | "kanban" | "flowbuilder" | "transcricao" | etc.
+  url     String // URL da imagem (upload ou link)
+  alt     String
+  caption String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([page, section])
+}
+
+// ─── SEO POR PÁGINA ───────────────────────────────────────────────────────────
+
+model PageSeo {
+  page        String   @id
+  // Slugs: "home" | "precos" | "funcionalidades" | "flowbuilder" | "ia" |
+  //        "integracoes" | "api" | "sobre" | "blog" | "parceiros" |
+  //        "afiliados" | "contato" | "primeiros-passos" | "status" |
+  //        "privacidade" | "termos" | "docs"
+  title       String
+  description String
+  ogImage     String?
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── DOCUMENTAÇÃO (importada do JSON) ────────────────────────────────────────
+
+model DocSection {
+  id       Int    @id
+  title    String
+  link     String
+  content  String @db.Text
+  menuPai  String?
+  ordem    Int    @default(0)
+
+  @@map("doc_sections")
+}
