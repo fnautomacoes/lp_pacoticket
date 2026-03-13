@@ -1,7 +1,5 @@
-# Dockerfile.dev
-# Imagem para desenvolvimento local com hot-reload.
-# Usada pelo docker-compose.yml.
-# NÃO usar em produção — use o Dockerfile principal.
+# Dockerfile.dev — Desenvolvimento local com hot-reload
+# Usado pelo docker-compose.yml. NÃO usar em produção.
 
 FROM node:20-alpine
 
@@ -9,11 +7,9 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-# Instalar dependências (serão sobrescritas pelo volume mount)
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Gerar Prisma client dentro da imagem
 COPY prisma ./prisma
 RUN npx prisma generate
 
@@ -21,6 +17,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# O código real é montado via volume no docker-compose.yml
-# O comando de start é definido no docker-compose.yml
 CMD ["npm", "run", "dev"]
