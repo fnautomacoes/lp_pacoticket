@@ -1,6 +1,7 @@
 // app/admin/metricas/page.tsx
 import { db } from '@/lib/db'
 import { revalidatePages } from '@/lib/revalidate'
+import { redirect } from 'next/navigation'
 
 async function updateMetric(formData: FormData) {
   'use server'
@@ -8,11 +9,16 @@ async function updateMetric(formData: FormData) {
   const value  = formData.get('value') as string
   const suffix = formData.get('suffix') as string
   const label  = `${value} ${suffix}`.trim()
-  await db.siteMetric.update({ where: { key }, data: { value, suffix, label } })
-  revalidatePages('home')
+  try {
+    await db.siteMetric.update({ where: { key }, data: { value, suffix, label } })
+    revalidatePages('home')
+  } catch (e) {
+    console.error('[updateMetric] falha:', e)
+    redirect('/admin/metricas?error=1')
+  }
 }
 
-export default async function MetricasPage() {
+export default async function MetricasPage({ searchParams }: { searchParams: { error?: string } }) {
   const metrics = await db.siteMetric.findMany({ orderBy: { order: 'asc' } })
 
   const DESCRIPTIONS: Record<string, string> = {
@@ -24,6 +30,12 @@ export default async function MetricasPage() {
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao salvar. Verifique os dados e tente novamente.
+        </div>
+      )}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:32 }}>
         <div>
           <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>Métricas do Site</h1>

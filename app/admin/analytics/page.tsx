@@ -1,35 +1,51 @@
 // app/admin/analytics/page.tsx
 import { db } from '@/lib/db'
 import { revalidatePages } from '@/lib/revalidate'
+import { redirect } from 'next/navigation'
 
 async function saveAnalytics(formData: FormData) {
   'use server'
   const ga_id         = (formData.get('ga_id') as string).trim()
   const meta_pixel_id = (formData.get('meta_pixel_id') as string).trim()
 
-  await db.siteConfig.upsert({ where:{key:'ga_id'},         update:{value:ga_id},         create:{key:'ga_id',value:ga_id} })
-  await db.siteConfig.upsert({ where:{key:'meta_pixel_id'}, update:{value:meta_pixel_id}, create:{key:'meta_pixel_id',value:meta_pixel_id} })
-
-  // Rebuild all pages so the scripts are included
-  revalidatePages('all')
+  try {
+    await db.siteConfig.upsert({ where:{key:'ga_id'},         update:{value:ga_id},         create:{key:'ga_id',value:ga_id} })
+    await db.siteConfig.upsert({ where:{key:'meta_pixel_id'}, update:{value:meta_pixel_id}, create:{key:'meta_pixel_id',value:meta_pixel_id} })
+    // Rebuild all pages so the scripts are included
+    revalidatePages('all')
+  } catch (e) {
+    console.error('[saveAnalytics] falha:', e)
+    redirect('/admin/analytics?error=1')
+  }
 }
 
 async function saveSiteLinks(formData: FormData) {
   'use server'
   const fields = ['favicon_url','whatsapp_cta','app_url','help_url','demo_url']
-  for (const key of fields) {
-    const value = (formData.get(key) as string).trim()
-    await db.siteConfig.upsert({ where:{key}, update:{value}, create:{key,value} })
+  try {
+    for (const key of fields) {
+      const value = (formData.get(key) as string).trim()
+      await db.siteConfig.upsert({ where:{key}, update:{value}, create:{key,value} })
+    }
+    revalidatePages('all')
+  } catch (e) {
+    console.error('[saveSiteLinks] falha:', e)
+    redirect('/admin/analytics?error=1')
   }
-  revalidatePages('all')
 }
 
-export default async function AnalyticsPage() {
+export default async function AnalyticsPage({ searchParams }: { searchParams: { error?: string } }) {
   const configs = await db.siteConfig.findMany()
   const get = (key: string) => configs.find(c => c.key === key)?.value ?? ''
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao salvar configurações. Tente novamente.
+        </div>
+      )}
       <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800, marginBottom:4 }}>Analytics & Config Global</h1>
       <p style={{ color:'#6B7C93', marginBottom:32 }}>Scripts e links globais — ao salvar, todas as páginas são reconstruídas.</p>
 

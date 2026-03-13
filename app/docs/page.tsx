@@ -1,5 +1,6 @@
 // app/docs/page.tsx
 import { db } from '@/lib/db'
+import { sanitizeContent } from '@/lib/sanitize'
 import { Metadata } from 'next'
 import Nav from '@/components/site/Nav'
 import Footer from '@/components/site/Footer'
@@ -15,7 +16,7 @@ export default async function DocsPage() {
   const sections = await db.docSection.findMany({ orderBy: { ordem: 'asc' } })
 
   // Build category groups from menu_pai
-  const categories = [...new Set(sections.map(s => s.menuPai).filter(Boolean))]
+  const categories = Array.from(new Set(sections.map(s => s.menuPai).filter(Boolean)))
   const noCategory = sections.filter(s => !s.menuPai)
 
   return (
@@ -76,7 +77,7 @@ export default async function DocsPage() {
                 <div
                   className="docs-content"
                   style={{ color:'var(--sub)', lineHeight:1.8, fontSize:15 }}
-                  dangerouslySetInnerHTML={{ __html: s.content }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeContent(s.content) }}
                 />
                 {s.link && (
                   <a href={s.link} target="_blank" rel="noreferrer"

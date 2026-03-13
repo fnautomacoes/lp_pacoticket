@@ -1,0 +1,20 @@
+# Dockerfile.dev — Desenvolvimento local com hot-reload
+# Usado pelo docker-compose.yml. NÃO usar em produção.
+
+FROM node:20-alpine
+
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY prisma ./prisma
+RUN npx prisma generate
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["npm", "run", "dev"]

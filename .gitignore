@@ -6,3 +6,8 @@ node_modules/
 dist/
 prisma/documentacao_pacoticket.json
 *.log
+tsconfig.tsbuildinfo
+
+# Gerados pelo install.sh — contêm segredos
+scripts/.deploy.env
+scripts/.secrets.txt

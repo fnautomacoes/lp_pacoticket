@@ -5,24 +5,38 @@
 
 import { draftMode } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+
+function isSafeInternalPath(page: string): boolean {
+  // Must start with / and must not contain protocol (no open redirects)
+  return page.startsWith('/') && !page.startsWith('//')
+}
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await getServerSession(authOptions)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const page = req.nextUrl.searchParams.get('page') ?? '/'
 
+  if (!isSafeInternalPath(page)) {
+    return NextResponse.json({ error: 'Invalid page path' }, { status: 400 })
+  }
+
   draftMode().enable()
 
-  // Redirect to the actual page in draft mode
   const url = new URL(page, req.nextUrl.origin)
   return NextResponse.redirect(url)
 }
 
 export async function DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   draftMode().disable()
   return NextResponse.json({ ok: true })
 }

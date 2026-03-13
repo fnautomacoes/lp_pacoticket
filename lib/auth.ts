@@ -1,12 +1,40 @@
 // lib/auth.ts
-import NextAuth from 'next-auth'
-import Credentials from 'next-auth/providers/credentials'
+import { type NextAuthOptions } from 'next-auth'
+import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { db } from './db'
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+// ── In-memory rate limiter (per-process; adequate for single-node deployment) ──
+// Allows MAX_ATTEMPTS failed logins per email within WINDOW_MS before blocking.
+const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+const MAX_ATTEMPTS = 5
+const WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+
+function isRateLimited(email: string): boolean {
+  const now = Date.now()
+  const entry = loginAttempts.get(email)
+  if (!entry || now > entry.resetAt) return false
+  return entry.count >= MAX_ATTEMPTS
+}
+
+function recordFailedAttempt(email: string): void {
+  const now = Date.now()
+  const entry = loginAttempts.get(email)
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(email, { count: 1, resetAt: now + WINDOW_MS })
+  } else {
+    entry.count++
+  }
+}
+
+function clearAttempts(email: string): void {
+  loginAttempts.delete(email)
+}
+
+// ── NextAuth v4 config ─────────────────────────────────────────────────────────
+export const authOptions: NextAuthOptions = {
   providers: [
-    Credentials({
+    CredentialsProvider({
       name: 'credentials',
       credentials: {
         email:    { label: 'Email',    type: 'email' },
@@ -15,17 +43,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        const user = await db.adminUser.findUnique({
-          where: { email: credentials.email as string },
-        })
-        if (!user) return null
+        const email = credentials.email as string
 
-        const valid = await bcrypt.compare(
-          credentials.password as string,
-          user.password,
-        )
-        if (!valid) return null
+        if (isRateLimited(email)) {
+          console.warn(`[auth] login bloqueado por rate limit: ${email}`)
+          return null
+        }
 
+        const user = await db.adminUser.findUnique({ where: { email } })
+        if (!user) {
+          recordFailedAttempt(email)
+          return null
+        }
+
+        const valid = await bcrypt.compare(credentials.password as string, user.password)
+        if (!valid) {
+          recordFailedAttempt(email)
+          return null
+        }
+
+        clearAttempts(email)
         return { id: user.id, email: user.email }
       },
     }),
@@ -40,8 +77,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token
     },
     session({ session, token }) {
-      if (session.user && token.id) session.user.id = token.id as string
+      if (session.user && token.id) (session.user as { id?: string }).id = token.id as string
       return session
     },
   },
-})
+}

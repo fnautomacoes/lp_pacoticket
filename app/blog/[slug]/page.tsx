@@ -1,5 +1,6 @@
 // app/blog/[slug]/page.tsx
 import { db } from '@/lib/db'
+import { sanitizeContent } from '@/lib/sanitize'
 import { notFound } from 'next/navigation'
 import Nav from '@/components/site/Nav'
 import Footer from '@/components/site/Footer'
@@ -48,7 +49,7 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
               style={{ width:'100%', borderRadius:16, border:'1px solid var(--border)', marginBottom:40, objectFit:'cover', maxHeight:400 }} />
           )}
           <div className="blog-content" style={{ color:'var(--sub)', fontSize:16, lineHeight:1.8 }}
-            dangerouslySetInnerHTML={{ __html: post.content }} />
+            dangerouslySetInnerHTML={{ __html: sanitizeContent(post.content) }} />
         </div>
       </article>
       <Footer />

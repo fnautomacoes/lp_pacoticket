@@ -1,20 +1,26 @@
 // middleware.ts
-import { auth } from '@/lib/auth'
+import { withAuth } from 'next-auth/middleware'
 import { NextResponse } from 'next/server'
 
-export default auth((req) => {
-  const isAdminRoute = req.nextUrl.pathname.startsWith('/admin')
-  const isLoginPage  = req.nextUrl.pathname === '/admin/login'
-  const isLoggedIn   = !!req.auth
+export default withAuth(
+  function middleware(req) {
+    const isLoginPage = req.nextUrl.pathname === '/admin/login'
+    const isLoggedIn  = !!req.nextauth.token
 
-  if (isAdminRoute && !isLoginPage && !isLoggedIn) {
-    return NextResponse.redirect(new URL('/admin/login', req.url))
+    if (isLoginPage && isLoggedIn) {
+      return NextResponse.redirect(new URL('/admin', req.url))
+    }
+  },
+  {
+    callbacks: {
+      authorized: ({ token, req }) => {
+        const isLoginPage = req.nextUrl.pathname === '/admin/login'
+        if (isLoginPage) return true
+        return !!token
+      },
+    },
   }
-
-  if (isLoginPage && isLoggedIn) {
-    return NextResponse.redirect(new URL('/admin', req.url))
-  }
-})
+)
 
 export const config = {
   matcher: ['/admin/:path*'],

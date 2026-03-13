@@ -1,54 +1,116 @@
-# docker-stack.yml
-# Deploy: docker stack deploy -c docker-stack.yml pacoticket-site
-version: "3.8"
+version: "3.9"
+
+# docker-stack.yml — Pacoticket Site
+# Deploy: docker stack deploy -c docker-stack.yml pacoticket --with-registry-auth
+#
+# Pré-requisitos no Swarm:
+#   - Rede overlay 'network_swarm_public' existente (Traefik já rodando)
+#   - PostgreSQL acessível pela DATABASE_URL informada
+#
+# Variáveis de ambiente obrigatórias (exportar antes do deploy):
+#   IMAGE_NAME        → ex: ghcr.io/usuario/pacoticket-site  ou  pacoticket-site
+#   DOMAIN            → ex: pacoticket.com.br
+#   DATABASE_URL      → postgresql://user:pass@host:5432/db
+#   NEXTAUTH_SECRET   → openssl rand -base64 32
+#   NEXTAUTH_URL      → https://pacoticket.com.br
+#   ADMIN_EMAIL       → email do admin
+#   ADMIN_PASSWORD    → senha do admin
+#   MANAGER_HOSTNAME  → hostname do nó manager (ex: manager-jedy)
+#
+# Opcionais (upload de imagens via Cloudflare R2):
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+#   R2_BUCKET_NAME, R2_PUBLIC_URL
 
 services:
-  web:
-    image: ghcr.io/SEU_USUARIO/pacoticket-site:latest
-    # ou build local: image: pacoticket-site:latest
+
+  # ── Aplicação Next.js ──────────────────────────────────────────────────────
+  pacoticket_web:
+    image: "${IMAGE_NAME:-pacoticket-site}:latest"
     environment:
-      DATABASE_URL: "postgresql://pacoticket:${POSTGRES_PASSWORD}@postgres:5432/pacoticket_site"
+      NODE_ENV: "production"
+      DATABASE_URL: "${DATABASE_URL}"
       NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"
-      NEXTAUTH_URL: "https://pacoticket.com.br"
+      NEXTAUTH_URL: "${NEXTAUTH_URL:-https://pacoticket.com.br}"
       ADMIN_EMAIL: "${ADMIN_EMAIL}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
-      NODE_ENV: "production"
+      R2_ACCOUNT_ID: "${R2_ACCOUNT_ID:-}"
+      R2_ACCESS_KEY_ID: "${R2_ACCESS_KEY_ID:-}"
+      R2_SECRET_ACCESS_KEY: "${R2_SECRET_ACCESS_KEY:-}"
+      R2_BUCKET_NAME: "${R2_BUCKET_NAME:-}"
+      R2_PUBLIC_URL: "${R2_PUBLIC_URL:-}"
     deploy:
+      mode: replicated
       replicas: 1
-      restart_policy:
-        condition: on-failure
+      placement:
+        constraints:
+          - node.hostname == ${MANAGER_HOSTNAME:-manager-jedy}
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.pacoticket.rule=Host(`pacoticket.com.br`) || Host(`www.pacoticket.com.br`)"
+        - "traefik.http.routers.pacoticket.rule=Host(`${DOMAIN:-pacoticket.com.br}`)"
         - "traefik.http.routers.pacoticket.entrypoints=websecure"
-        - "traefik.http.routers.pacoticket.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.pacoticket.tls.certresolver=letsencryptresolver"
         - "traefik.http.services.pacoticket.loadbalancer.server.port=3000"
-        # Redirect www → apex
-        - "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\\.pacoticket\\.com\\.br/(.*)"
-        - "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://pacoticket.com.br/$${1}"
-        - "traefik.http.routers.pacoticket.middlewares=www-redirect"
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     networks:
-      - traefik-public
-      - pacoticket-internal
+      - network_swarm_public
 
-  # Opcional: rodar migrations automaticamente no deploy
-  # Se preferir rodar manualmente, remova este serviço
-  migrate:
-    image: ghcr.io/SEU_USUARIO/pacoticket-site:latest
-    command: sh -c "npx prisma db push && npx tsx prisma/seed.ts"
+  # ── Migrations + Seed (executa uma vez e encerra) ─────────────────────────
+  pacoticket_migrate:
+    image: "${IMAGE_NAME:-pacoticket-site}:latest"
+    command: >
+      sh -c "
+        echo '[migrate] Aguardando banco...' &&
+        sleep 5 &&
+        echo '[migrate] Rodando prisma db push...' &&
+        npx prisma db push --skip-generate &&
+        echo '[migrate] Rodando seed...' &&
+        npx tsx prisma/seed.ts &&
+        echo '[migrate] Concluído.'
+      "
     environment:
-      DATABASE_URL: "postgresql://pacoticket:${POSTGRES_PASSWORD}@postgres:5432/pacoticket_site"
+      DATABASE_URL: "${DATABASE_URL}"
       ADMIN_EMAIL: "${ADMIN_EMAIL}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
     deploy:
+      mode: replicated
       replicas: 1
+      placement:
+        constraints:
+          - node.hostname == ${MANAGER_HOSTNAME:-manager-jedy}
       restart_policy:
         condition: none
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
     networks:
-      - pacoticket-internal
+      - network_swarm_public
 
 networks:
-  traefik-public:
+  network_swarm_public:
     external: true
-  pacoticket-internal:
-    driver: overlay

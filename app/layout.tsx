@@ -3,7 +3,6 @@ import type { Metadata } from 'next'
 import { Syne, DM_Sans } from 'next/font/google'
 import './globals.css'
 import { db } from '@/lib/db'
-import AnalyticsScripts from '@/components/site/AnalyticsScripts'
 
 const syne   = Syne({ subsets: ['latin'], weight: ['700','800'], variable: '--font-syne' })
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['300','400','500','600'], variable: '--font-dm' })

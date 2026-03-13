@@ -1,6 +1,7 @@
 // app/admin/seo/page.tsx
 import { db } from '@/lib/db'
 import { revalidatePages } from '@/lib/revalidate'
+import { redirect } from 'next/navigation'
 import type { PageKey } from '@/lib/revalidate'
 
 async function updateSeo(formData: FormData) {
@@ -10,15 +11,20 @@ async function updateSeo(formData: FormData) {
   const description = formData.get('description') as string
   const ogImage     = (formData.get('ogImage') as string).trim() || null
 
-  await db.pageSeo.upsert({
-    where: { page },
-    update: { title, description, ogImage },
-    create: { page, title, description, ogImage },
-  })
-  revalidatePages((page === 'home' ? 'home' : page) as PageKey)
+  try {
+    await db.pageSeo.upsert({
+      where: { page },
+      update: { title, description, ogImage },
+      create: { page, title, description, ogImage },
+    })
+    revalidatePages((page === 'home' ? 'home' : page) as PageKey)
+  } catch (e) {
+    console.error('[updateSeo] falha:', e)
+    redirect('/admin/seo?error=1')
+  }
 }
 
-export default async function SeoPage() {
+export default async function SeoPage({ searchParams }: { searchParams: { error?: string } }) {
   const seoList = await db.pageSeo.findMany({ orderBy: { page: 'asc' } })
 
   const PAGE_LABELS: Record<string, string> = {
@@ -31,6 +37,12 @@ export default async function SeoPage() {
 
   return (
     <div>
+      {searchParams.error && (
+        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
+          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
+          Erro ao salvar SEO. Verifique os dados e tente novamente.
+        </div>
+      )}
       <div style={{ marginBottom:32 }}>
         <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>SEO por Página</h1>
         <p style={{ color:'#6B7C93', marginTop:4 }}>
