@@ -1,0 +1,81 @@
+# docker-compose.yml
+# Ambiente de desenvolvimento local com Docker.
+# Inclui PostgreSQL local + hot-reload do Next.js.
+#
+# Uso:
+#   docker compose up -d          # subir serviços em background
+#   docker compose up             # subir com logs no terminal
+#   docker compose down           # parar e remover containers
+#   docker compose down -v        # parar e remover volumes (apaga o banco!)
+#   docker compose logs -f web    # acompanhar logs da app
+
+version: "3.8"
+
+services:
+
+  # ── PostgreSQL local ─────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pacoticket
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: pacoticket_site
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"               # exposto para acesso via DBeaver/TablePlus/etc
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pacoticket -d pacoticket_site"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Next.js (modo dev com hot-reload) ────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://pacoticket:devpassword@postgres:5432/pacoticket_site"
+      NEXTAUTH_SECRET: "dev-secret-nao-usar-em-producao"
+      NEXTAUTH_URL: "http://localhost:3000"
+      ADMIN_EMAIL: "admin@pacoticket.local"
+      ADMIN_PASSWORD: "admin123"
+      NODE_ENV: "development"
+      # R2 (opcional — deixe em branco para usar só URL)
+      R2_ACCOUNT_ID: ""
+      R2_ACCESS_KEY_ID: ""
+      R2_SECRET_ACCESS_KEY: ""
+      R2_BUCKET_NAME: ""
+      R2_PUBLIC_URL: ""
+    volumes:
+      - .:/app                    # hot-reload: monta o código local no container
+      - /app/node_modules         # preserva node_modules do container
+      - /app/.next                # preserva cache do Next.js
+    ports:
+      - "3000:3000"
+    command: sh -c "npx prisma db push --skip-generate && npx tsx prisma/seed.ts && npm run dev"
+
+  # ── pgAdmin (opcional — interface web para o banco) ──────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    profiles: ["tools"]           # ativado apenas com: docker compose --profile tools up
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@pacoticket.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  pgadmin_data:

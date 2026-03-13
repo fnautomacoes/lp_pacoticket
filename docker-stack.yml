@@ -1,54 +1,132 @@
 # docker-stack.yml
-# Deploy: docker stack deploy -c docker-stack.yml pacoticket-site
+# Deploy: docker stack deploy -c docker-stack.yml pacoticket --with-registry-auth
+#
+# Pré-requisitos no Swarm:
+#   - Rede overlay 'traefik-public' existente (Traefik já rodando)
+#   - PostgreSQL acessível via DATABASE_URL
+#
+# Variáveis obrigatórias (exportar antes do deploy ou usar .env):
+#   DATABASE_URL      → postgresql://user:pass@host:5432/db
+#   NEXTAUTH_SECRET   → string aleatória (openssl rand -base64 32)
+#   NEXTAUTH_URL      → https://seu-dominio.com.br
+#   ADMIN_EMAIL       → e-mail do admin
+#   ADMIN_PASSWORD    → senha do admin
+#   DOMAIN            → seu-dominio.com.br
+#   IMAGE_NAME        → ghcr.io/usuario/pacoticket-site ou pacoticket-site
+#
+# Variáveis opcionais (upload de imagens via R2):
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+#   R2_BUCKET_NAME, R2_PUBLIC_URL
+
 version: "3.8"
 
 services:
+
+  # ── Aplicação Next.js ────────────────────────────────────────────────────────
   web:
-    image: ghcr.io/SEU_USUARIO/pacoticket-site:latest
-    # ou build local: image: pacoticket-site:latest
+    image: "${IMAGE_NAME:-pacoticket-site}:latest"
     environment:
-      DATABASE_URL: "postgresql://pacoticket:${POSTGRES_PASSWORD}@postgres:5432/pacoticket_site"
+      NODE_ENV: "production"
+      # Banco de dados
+      DATABASE_URL: "${DATABASE_URL}"
+      # NextAuth
       NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"
-      NEXTAUTH_URL: "https://pacoticket.com.br"
+      NEXTAUTH_URL: "${NEXTAUTH_URL:-https://pacoticket.com.br}"
+      # Admin
       ADMIN_EMAIL: "${ADMIN_EMAIL}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
-      NODE_ENV: "production"
+      # Cloudflare R2 — deixe em branco se não usar
+      R2_ACCOUNT_ID: "${R2_ACCOUNT_ID:-}"
+      R2_ACCESS_KEY_ID: "${R2_ACCESS_KEY_ID:-}"
+      R2_SECRET_ACCESS_KEY: "${R2_SECRET_ACCESS_KEY:-}"
+      R2_BUCKET_NAME: "${R2_BUCKET_NAME:-}"
+      R2_PUBLIC_URL: "${R2_PUBLIC_URL:-}"
     deploy:
       replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first          # zero-downtime: sobe nova antes de derrubar a velha
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
       restart_policy:
         condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
       labels:
+        # ── Traefik ──────────────────────────────────────────────────────────
         - "traefik.enable=true"
-        - "traefik.http.routers.pacoticket.rule=Host(`pacoticket.com.br`) || Host(`www.pacoticket.com.br`)"
+        - "traefik.docker.network=traefik-public"
+        # Router HTTPS
+        - "traefik.http.routers.pacoticket.rule=Host(`${DOMAIN:-pacoticket.com.br}`) || Host(`www.${DOMAIN:-pacoticket.com.br}`)"
         - "traefik.http.routers.pacoticket.entrypoints=websecure"
+        - "traefik.http.routers.pacoticket.tls=true"
         - "traefik.http.routers.pacoticket.tls.certresolver=letsencrypt"
-        - "traefik.http.services.pacoticket.loadbalancer.server.port=3000"
-        # Redirect www → apex
-        - "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\\.pacoticket\\.com\\.br/(.*)"
-        - "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://pacoticket.com.br/$${1}"
+        # Router HTTP → redirecionar para HTTPS
+        - "traefik.http.routers.pacoticket-http.rule=Host(`${DOMAIN:-pacoticket.com.br}`) || Host(`www.${DOMAIN:-pacoticket.com.br}`)"
+        - "traefik.http.routers.pacoticket-http.entrypoints=web"
+        - "traefik.http.routers.pacoticket-http.middlewares=https-redirect"
+        # Middleware: HTTP → HTTPS
+        - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+        - "traefik.http.middlewares.https-redirect.redirectscheme.permanent=true"
+        # Middleware: www → apex
+        - "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\\.${DOMAIN:-pacoticket\\.com\\.br}/(.*)"
+        - "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://${DOMAIN:-pacoticket.com.br}/$${1}"
+        - "traefik.http.middlewares.www-redirect.redirectregex.permanent=true"
         - "traefik.http.routers.pacoticket.middlewares=www-redirect"
+        # Porta do serviço Next.js
+        - "traefik.http.services.pacoticket.loadbalancer.server.port=3000"
     networks:
       - traefik-public
       - pacoticket-internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Opcional: rodar migrations automaticamente no deploy
-  # Se preferir rodar manualmente, remova este serviço
+  # ── Migrations + Seed (roda uma vez no deploy, encerra sozinho) ───────────────
   migrate:
-    image: ghcr.io/SEU_USUARIO/pacoticket-site:latest
-    command: sh -c "npx prisma db push && npx tsx prisma/seed.ts"
+    image: "${IMAGE_NAME:-pacoticket-site}:latest"
+    # Aguarda um momento para o banco estar pronto, depois roda migrations
+    command: >
+      sh -c "
+        echo '[migrate] Aguardando banco...' &&
+        sleep 5 &&
+        echo '[migrate] Rodando prisma db push...' &&
+        npx prisma db push --skip-generate &&
+        echo '[migrate] Rodando seed...' &&
+        npx tsx prisma/seed.ts &&
+        echo '[migrate] Concluído.'
+      "
     environment:
-      DATABASE_URL: "postgresql://pacoticket:${POSTGRES_PASSWORD}@postgres:5432/pacoticket_site"
+      DATABASE_URL: "${DATABASE_URL}"
       ADMIN_EMAIL: "${ADMIN_EMAIL}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
     deploy:
       replicas: 1
       restart_policy:
-        condition: none
+        condition: none             # não reiniciar após encerrar
+      placement:
+        constraints:
+          - "node.role == manager"  # rodar no manager para acesso ao estado do Swarm
     networks:
       - pacoticket-internal
 
 networks:
+  # Rede compartilhada com Traefik (já existente no Swarm)
   traefik-public:
     external: true
+
+  # Rede interna do projeto (criada automaticamente pelo stack)
   pacoticket-internal:
     driver: overlay
+    attachable: true
