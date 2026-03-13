@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { revalidatePages } from '@/lib/revalidate'
 import { redirect } from 'next/navigation'
 import type { PageKey } from '@/lib/revalidate'
+import ImageUpload from '@/components/admin/ImageUpload'
 
 async function saveScreenshot(formData: FormData) {
   'use server'
@@ -51,22 +52,22 @@ const SLOTS = [
 export default async function ScreenshotsPage({ searchParams }: { searchParams: { error?: string } }) {
   const screenshots = await db.screenshot.findMany()
   const screenshotMap = new Map(screenshots.map(s => [`${s.page}__${s.section}`, s]))
+  const r2Enabled = !!process.env.R2_PUBLIC_URL
 
   // Group slots by page
-  const pages = [...new Set(SLOTS.map(s => s.page))]
+  const pages = Array.from(new Set(SLOTS.map(s => s.page)))
 
   return (
     <div>
       {searchParams.error && (
-        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
-          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
-          Erro ao salvar screenshot. Tente novamente.
-        </div>
+        <div className="admin-error">Erro ao salvar screenshot. Tente novamente.</div>
       )}
       <div style={{ marginBottom:32 }}>
         <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>Screenshots</h1>
-        <p style={{ color:'#6B7C93', marginTop:4 }}>
-          Cole a URL de cada imagem (hospede no R2, S3, ou qualquer CDN). Ao salvar, a página correspondente é reconstruída.
+        <p style={{ color:'var(--muted)', marginTop:4 }}>
+          {r2Enabled
+            ? 'Faça upload direto ou cole uma URL. Ao salvar, a página correspondente é reconstruída.'
+            : 'Cole a URL de cada imagem (hospede no R2, S3, ou qualquer CDN). Configure R2_PUBLIC_URL para habilitar upload direto.'}
         </p>
       </div>
 
@@ -83,35 +84,27 @@ export default async function ScreenshotsPage({ searchParams }: { searchParams: 
                 const key = `${slot.page}__${slot.section}`
                 const existing = screenshotMap.get(key)
                 return (
-                  <form key={key} action={saveScreenshot}
-                    style={{ background:'rgba(255,255,255,.03)', border:'1px solid rgba(255,255,255,.07)',
-                      borderRadius:12, padding:20 }}>
+                  <form key={key} action={saveScreenshot} className="admin-card" style={{ padding:20 }}>
                     <input type="hidden" name="page" value={slot.page} />
                     <input type="hidden" name="section" value={slot.section} />
-                    <div style={{ fontSize:13, fontWeight:600, color:'#9FAFC0', marginBottom:14 }}>{slot.label}</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:'var(--sub)', marginBottom:14 }}>{slot.label}</div>
                     <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr auto', gap:12, alignItems:'end' }}>
                       <div>
-                        <label style={lS}>URL da imagem</label>
-                        <input name="url" defaultValue={existing?.url ?? ''} placeholder="https://..." style={iS} />
+                        <label className="admin-label" style={{ fontSize:11 }}>URL / upload</label>
+                        <ImageUpload name="url" defaultValue={existing?.url} r2Enabled={r2Enabled} />
                       </div>
                       <div>
-                        <label style={lS}>Alt text</label>
-                        <input name="alt" defaultValue={existing?.alt ?? slot.alt} style={iS} />
+                        <label className="admin-label" style={{ fontSize:11 }}>Alt text</label>
+                        <input name="alt" defaultValue={existing?.alt ?? slot.alt} className="admin-input" style={{ fontSize:13, padding:'9px 11px' }} />
                       </div>
                       <div>
-                        <label style={lS}>Legenda (opcional)</label>
-                        <input name="caption" defaultValue={existing?.caption ?? ''} style={iS} />
+                        <label className="admin-label" style={{ fontSize:11 }}>Legenda (opcional)</label>
+                        <input name="caption" defaultValue={existing?.caption ?? ''} className="admin-input" style={{ fontSize:13, padding:'9px 11px' }} />
                       </div>
-                      <button type="submit" style={bS}>{existing ? 'Atualizar ✓' : 'Salvar'}</button>
+                      <button type="submit" className="admin-btn" style={{ padding:'9px 16px', fontSize:13 }}>
+                        {existing ? 'Atualizar ✓' : 'Salvar'}
+                      </button>
                     </div>
-                    {existing?.url && (
-                      <div style={{ marginTop:12 }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={existing.url} alt={existing.alt}
-                          style={{ maxHeight:80, borderRadius:8, border:'1px solid rgba(255,255,255,.1)', objectFit:'cover' }}
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                      </div>
-                    )}
                   </form>
                 )
               })}
@@ -122,7 +115,3 @@ export default async function ScreenshotsPage({ searchParams }: { searchParams: 
     </div>
   )
 }
-
-const lS: React.CSSProperties = { fontSize:11, color:'#9FAFC0', display:'block', marginBottom:5, textTransform:'uppercase', letterSpacing:'.04em' }
-const iS: React.CSSProperties = { width:'100%', background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.1)', borderRadius:8, padding:'9px 11px', color:'#EEF1F5', fontSize:13, outline:'none', fontFamily:'DM Sans,sans-serif', boxSizing:'border-box' }
-const bS: React.CSSProperties = { background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.1)', borderRadius:8, padding:'9px 16px', fontSize:13, color:'#EEF1F5', cursor:'pointer', whiteSpace:'nowrap' }

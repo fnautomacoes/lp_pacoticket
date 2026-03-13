@@ -1,6 +1,6 @@
 // lib/auth.ts
-import NextAuth from 'next-auth'
-import Credentials from 'next-auth/providers/credentials'
+import { type NextAuthOptions } from 'next-auth'
+import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { db } from './db'
 
@@ -31,10 +31,10 @@ function clearAttempts(email: string): void {
   loginAttempts.delete(email)
 }
 
-// ── NextAuth config ────────────────────────────────────────────────────────────
-export const { handlers, auth, signIn, signOut } = NextAuth({
+// ── NextAuth v4 config ─────────────────────────────────────────────────────────
+export const authOptions: NextAuthOptions = {
   providers: [
-    Credentials({
+    CredentialsProvider({
       name: 'credentials',
       credentials: {
         email:    { label: 'Email',    type: 'email' },
@@ -77,8 +77,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token
     },
     session({ session, token }) {
-      if (session.user && token.id) session.user.id = token.id as string
+      if (session.user && token.id) (session.user as { id?: string }).id = token.id as string
       return session
     },
   },
-})
+}

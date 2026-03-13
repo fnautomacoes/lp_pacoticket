@@ -58,32 +58,27 @@ export default async function BlogListPage({ searchParams }: { searchParams: { e
   return (
     <div>
       {searchParams.error && (
-        <div style={{ background:'rgba(255,59,48,.1)', border:'1px solid rgba(255,59,48,.2)', borderRadius:10,
-          padding:'12px 16px', marginBottom:24, fontSize:14, color:'#ff6b6b' }}>
-          Erro ao processar post. Tente novamente.
-        </div>
+        <div className="admin-error">Erro ao processar post. Tente novamente.</div>
       )}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'start', marginBottom:32 }}>
         <div>
           <h1 style={{ fontFamily:'Syne,sans-serif', fontSize:28, fontWeight:800 }}>Blog</h1>
-          <p style={{ color:'#6B7C93', marginTop:4 }}>{posts.length} post(s) — clique para editar</p>
+          <p style={{ color:'var(--muted)', marginTop:4 }}>{posts.length} post(s) — clique para editar</p>
         </div>
-        <a href="/blog" target="_blank" style={{ fontSize:13, color:'#00D170', textDecoration:'none',
-          padding:'8px 16px', background:'rgba(0,209,112,.08)', borderRadius:100, border:'1px solid rgba(0,209,112,.2)' }}>
-          Preview blog ↗
-        </a>
+        <a href="/blog" target="_blank" className="admin-pill-green">Preview blog ↗</a>
       </div>
 
       {/* New post form */}
-      <form action={createPost} style={{ background:'rgba(0,209,112,.03)', border:'1px dashed rgba(0,209,112,.2)',
-        borderRadius:12, padding:20, marginBottom:24, display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:12 }}>
+      <form action={createPost}
+        style={{ background:'rgba(0,209,112,.03)', border:'1px dashed rgba(0,209,112,.2)',
+          borderRadius:12, padding:20, marginBottom:24, display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:12 }}>
         <div>
-          <label style={lS}>Título do novo post</label>
-          <input name="title" placeholder="Como 5 atendentes usam o mesmo número..." style={iS} required />
+          <label className="admin-label">Título do novo post</label>
+          <input name="title" placeholder="Como 5 atendentes usam o mesmo número..." className="admin-input" required />
         </div>
         <div>
-          <label style={lS}>Categoria</label>
-          <select name="category" style={{ ...iS, cursor:'pointer' }}>
+          <label className="admin-label">Categoria</label>
+          <select name="category" className="admin-input" style={{ cursor:'pointer' }}>
             <option>WhatsApp Business</option>
             <option>Automação</option>
             <option>Cases e resultados</option>
@@ -91,16 +86,15 @@ export default async function BlogListPage({ searchParams }: { searchParams: { e
             <option>Tutoriais</option>
           </select>
         </div>
-        <button type="submit" style={{ ...bS, alignSelf:'flex-end', background:'rgba(0,209,112,.1)',
-          borderColor:'rgba(0,209,112,.2)', color:'#00D170' }}>
+        <button type="submit" className="admin-btn admin-btn-green" style={{ alignSelf:'flex-end' }}>
           Criar post
         </button>
       </form>
 
       {/* Posts list */}
-      <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid rgba(255,255,255,.07)', borderRadius:12, overflow:'hidden' }}>
+      <div className="admin-card" style={{ borderRadius:12, overflow:'hidden' }}>
         {posts.length === 0 && (
-          <div style={{ padding:40, textAlign:'center', color:'#6B7C93', fontSize:14 }}>
+          <div style={{ padding:40, textAlign:'center', color:'var(--muted)', fontSize:14 }}>
             Nenhum post criado ainda. Use o formulário acima para criar o primeiro.
           </div>
         )}
@@ -110,27 +104,23 @@ export default async function BlogListPage({ searchParams }: { searchParams: { e
             <div style={{ fontSize:24 }}>{post.coverEmoji}</div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:14, fontWeight:600 }}>{post.title}</div>
-              <div style={{ fontSize:12, color:'#6B7C93', marginTop:2 }}>
+              <div style={{ fontSize:12, color:'var(--muted)', marginTop:2 }}>
                 {post.category} · {post.published ? '✓ Publicado' : '● Rascunho'} · /blog/{post.slug}
               </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
-              <Link href={`/admin/blog/${post.id}`}
-                style={{ fontSize:12, color:'#9FAFC0', textDecoration:'none', padding:'6px 14px',
-                  background:'rgba(255,255,255,.05)', borderRadius:100, border:'1px solid rgba(255,255,255,.08)' }}>
+              <Link href={`/admin/blog/${post.id}`} className="admin-pill-muted" style={{ fontSize:12, padding:'6px 14px' }}>
                 Editar
               </Link>
               {post.published && (
                 <a href={`/blog/${post.slug}`} target="_blank" rel="noreferrer"
-                  style={{ fontSize:12, color:'#00D170', textDecoration:'none', padding:'6px 14px',
-                    background:'rgba(0,209,112,.08)', borderRadius:100, border:'1px solid rgba(0,209,112,.2)' }}>
+                  className="admin-pill-green" style={{ fontSize:12, padding:'6px 14px' }}>
                   Ver ↗
                 </a>
               )}
               <form action={deletePost}>
                 <input type="hidden" name="id" value={post.id} />
-                <button type="submit" style={{ fontSize:12, color:'#ff6b6b', background:'rgba(255,59,48,.08)',
-                  border:'1px solid rgba(255,59,48,.15)', borderRadius:100, padding:'6px 14px', cursor:'pointer' }}>
+                <button type="submit" className="admin-btn admin-btn-red" style={{ fontSize:12, borderRadius:100, padding:'6px 14px' }}>
                   Excluir
                 </button>
               </form>
@@ -141,7 +131,3 @@ export default async function BlogListPage({ searchParams }: { searchParams: { e
     </div>
   )
 }
-
-const lS: React.CSSProperties = { fontSize:12, color:'#9FAFC0', display:'block', marginBottom:6 }
-const iS: React.CSSProperties = { width:'100%', background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.1)', borderRadius:8, padding:'10px 12px', color:'#EEF1F5', fontSize:14, outline:'none', fontFamily:'DM Sans,sans-serif', boxSizing:'border-box' }
-const bS: React.CSSProperties = { background:'rgba(255,255,255,.06)', border:'1px solid rgba(255,255,255,.1)', borderRadius:8, padding:'10px 16px', fontSize:13, color:'#EEF1F5', cursor:'pointer', whiteSpace:'nowrap' }

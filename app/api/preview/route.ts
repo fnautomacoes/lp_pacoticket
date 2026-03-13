@@ -5,7 +5,8 @@
 
 import { draftMode } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 function isSafeInternalPath(page: string): boolean {
   // Must start with / and must not contain protocol (no open redirects)
@@ -13,7 +14,7 @@ function isSafeInternalPath(page: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await getServerSession(authOptions)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await auth()
+  const session = await getServerSession(authOptions)
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

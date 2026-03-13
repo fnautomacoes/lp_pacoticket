@@ -16,7 +16,7 @@ export default async function DocsPage() {
   const sections = await db.docSection.findMany({ orderBy: { ordem: 'asc' } })
 
   // Build category groups from menu_pai
-  const categories = [...new Set(sections.map(s => s.menuPai).filter(Boolean))]
+  const categories = Array.from(new Set(sections.map(s => s.menuPai).filter(Boolean)))
   const noCategory = sections.filter(s => !s.menuPai)
 
   return (
